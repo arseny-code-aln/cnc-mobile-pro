@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNC Mobile Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19; --panel-bg: #131d31; --panel-card: #1a2642;
+            --accent-color: #3b82f6; --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            --text-color: #f1f5f9; --text-muted: #94a3b8; --border-color: #2a3a5e;
+            --success-color: #22c55e; --danger-color: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: var(--panel-bg); padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.1rem; color: #60a5fa; }
+        .content { flex: 1; overflow-y: auto; padding: 14px; padding-bottom: 70px; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+        .card { background: var(--panel-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+        .card h3 { font-size: 1rem; margin-bottom: 12px; color: #60a5fa; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+        input, select, textarea { width: 100%; padding: 8px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-color); font-size: 0.9rem; }
+        button.btn { width: 100%; padding: 10px; background: var(--accent-gradient); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+        button.btn-secondary { background: #2a3a5e; }
+        .result-box { background: var(--bg-color); border: 1px solid var(--border-color); border-left: 4px solid var(--success-color); padding: 10px; margin-top: 10px; font-size: 0.8rem; line-height: 1.4; }
+        #webgl-container { width: 100%; height: 320px; background: #05070c; border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
+        
+        .chat-container { display: flex; flex-direction: column; height: calc(100vh - 180px); background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+        .chat-messages { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 0.85rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+        .chat-bubble.user { align-self: flex-end; background: var(--accent-gradient); color: white; border-bottom-right-radius: 2px; }
+        .chat-bubble.assistant { align-self: flex-start; background: var(--panel-card); color: var(--text-color); border: 1px solid var(--border-color); border-bottom-left-radius: 2px; }
+        .chat-input-area { display: flex; gap: 6px; padding: 8px; background: var(--panel-bg); border-top: 1px solid var(--border-color); }
+        .chat-input-area input { flex: 1; }
+        .chat-input-area button { width: auto; padding: 0 16px; margin: 0; }
+        .quick-prompts { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0; margin-bottom: 8px; }
+        .prompt-chip { background: var(--panel-card); border: 1px solid var(--border-color); color: #60a5fa; padding: 6px 10px; border-radius: 16px; font-size: 0.72rem; white-space: nowrap; cursor: pointer; }
+        .prompt-chip:active { background: var(--accent-color); color: white; }
+
+        .popup-menu { position: absolute; bottom: 65px; right: 10px; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; display: none; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 100; width: 230px; overflow: hidden; }
+        .popup-menu.show { display: flex; }
+        .popup-btn { background: none; border: none; color: var(--text-color); padding: 12px 16px; text-align: left; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; }
+        .popup-btn:last-child { border-bottom: none; }
+        .popup-btn:active, .popup-btn.active { background: var(--panel-card); color: var(--accent-color); }
+        nav.bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--panel-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 6px 0; z-index: 10; }
+        .nav-btn { background: none; border: none; color: var(--text-muted); font-size: 0.65rem; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; flex: 1; }
+        .nav-btn.active { color: var(--accent-color); font-weight: 600; }
+        .nav-icon { font-size: 1.2rem; }
+    </style>
+</head>
+<body onload="initApp()">
+
+    <header>
+        <h1 id="page-title">Фрезерные режимы</h1>
+    </header>
+
+    <div class="content">
+        <div id="tab-regimes" class="tab-pane active">
+            <div class="card">
+                <h3>Фрезерные режимы</h3>
+                <div class="form-group"><label>Материал</label><select id="reg-mat"></select></div>
+                <div class="form-group"><label>Диаметр (мм)</label><input type="number" id="reg-d" value="12"></div>
+                <div class="form-group"><label>Зубья (Z)</label><input type="number" id="reg-z" value="4"></div>
+                <button class="btn" onclick="calcRegimes()">Рассчитать</button>
+                <div id="reg-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div id="tab-turning" class="tab-pane">
+            <div class="card">
+                <h3>Токарные режимы</h3>
+                <div class="form-group"><label>Диаметр (мм)</label><input type="number" id="turn-d" value="50"></div>
+                <div class="form-group"><label>Скорость Vc (м/мин)</label><input type="number" id="turn-vc" value="200"></div>
+                <div class="form-group"><label>Подача fr (мм/об)</label><input type="number" id="turn-fr" value="0.25" step="0.05"></div>
+                <button class="btn" onclick="calcTurning()">Рассчитать</button>
+                <div id="turn-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div id="tab-gcode" class="tab-pane">
+            <div class="card">
+                <h3>Проверка G-кода</h3>
+                <div class="form-group"><label>Код</label><textarea id="gc-text" rows="5" placeholder="G90..."></textarea></div>
+                <button class="btn" onclick="validateCode()">Проверить</button>
+                <div id="gc-res" class="result-box" style="display:none;"></div>
+                <button class="btn btn-secondary" style="margin-top:10px;" onclick="exportCurrentGCode('prog')">💾 Сохранить</button>
+            </div>
+        </div>
+
+        <div id="tab-timecost" class="tab-pane">
+            <div class="card">
+                <h3>Время и Стоимость</h3>
+                <div class="form-group"><label>G-код</label><textarea id="tc-gcode" rows="4"></textarea></div>
+                <div class="form-group"><label>Ставка (руб/ч)</label><input type="number" id="tc-rate" value="2500"></div>
+                <div class="form-group"><label>Подготовка (руб)</label><input type="number" id="tc-setup" value="500"></div>
+                <button class="btn" onclick="calcTimeCost()">Рассчитать</button>
+                <div id="tc-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div id="tab-handbook" class="tab-pane">
+            <div class="card">
+                <h3>🔩 Резьбы и сверла</h3>
+                <div class="form-group"><label>Номинал (М)</label><input type="number" id="th-nom" value="10"></div>
+                <div class="form-group"><label>Шаг (мм)</label><input type="number" id="th-pitch" value="1.5" step="0.25"></div>
+                <button class="btn" onclick="calcThread()">Сверло под резьбу</button>
+                <div id="th-res" class="result-box" style="display:none;"></div>
+            </div>
+            <div class="card">
+                <h3>📏 Допуски и посадки (ISO)</h3>
+                <div class="form-group"><label>Размер (мм)</label><input type="number" id="tol-nom" value="40"></div>
+                <div class="form-group"><label>Поле</label>
+                    <select id="tol-fit"><option value="H7">H7 (отверстие)</option><option value="h6">h6 (вал)</option></select>
+                </div>
+                <button class="btn" onclick="calcTolerance()">Рассчитать</button>
+                <div id="tol-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div id="tab-ai" class="tab-pane">
+            <div class="quick-prompts">
+                <div class="prompt-chip" onclick="useQuickPrompt('Как убрать вибрацию при фрезеровании титана?')">⚡ Борьба с вибрацией</div>
+                <div class="prompt-chip" onclick="useQuickPrompt('Расшифруй параметры пластины WNMG080408')">🔍 Расшифровка пластины</div>
+                <div class="prompt-chip" onclick="useQuickPrompt('Как написать цикл нарезания резьбы G76 на Fanuc?')">📜 Цикл G76 Fanuc</div>
+            </div>
+            <div class="chat-container">
+                <div id="chat-messages" class="chat-messages">
+                    <div class="chat-bubble assistant">🤖 **ИИ-Технолог ЧПУ на связи!**
+Задавай любые вопросы по режимам резания, выбору инструмента, подбору пластин или отладке G-кода.</div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-user-input" placeholder="Спросить ИИ-технолога..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <button class="btn" onclick="sendChatMessage()">➔</button>
+                </div>
+            </div>
+            <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.75rem;" onclick="clearChat()">🗑 Очистить диалог</button>
+        </div>
+
+        <div id="tab-viewer" class="tab-pane">
+            <div class="card">
+                <h3>3D Симулятор</h3>
+                <div id="webgl-container"></div>
+                <button class="btn" style="margin-top: 12px;" onclick="loadAndRender3D()">Запустить симуляцию</button>
+            </div>
+        </div>
+
+        <div id="tab-pcd" class="tab-pane">
+            <div class="card">
+                <h3>Генератор PCD</h3>
+                <div class="form-group"><label>Радиус R / Кол-во</label><input type="number" id="pcd-r" value="50"> <input type="number" id="pcd-count" value="6" style="margin-top:5px;"></div>
+                <div class="form-group"><label>Глубина</label><input type="number" id="pcd-depth" value="15"></div>
+                <button class="btn" onclick="calcPCD()">PCD G-код</button>
+                <div id="pcd-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div id="tab-codes" class="tab-pane">
+            <div class="card">
+                <h3>G/M Коды</h3>
+                <div class="form-group"><label>Код</label><input type="text" id="code-input" placeholder="G00"></div>
+                <button class="btn" onclick="searchCode()">Найти</button>
+                <div id="code-res" class="result-box" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="more-menu" class="popup-menu">
+        <button class="popup-btn" onclick="switchTab('turning', 'Токарка', this, true)">🟢 Токарка</button>
+        <button class="popup-btn" onclick="switchTab('handbook', 'Справочники', this, true)">📚 Справочники</button>
+        <button class="popup-btn" onclick="switchTab('ai', 'ИИ Технолог', this, true)">🤖 ИИ Чат</button>
+        <button class="popup-btn" onclick="switchTab('viewer', '3D Симулятор', this, true)">🧊 3D Симулятор</button>
+        <button class="popup-btn" onclick="switchTab('pcd', 'PCD Генератор', this, true)">⭕ PCD Сверление</button>
+        <button class="popup-btn" onclick="switchTab('codes', 'G/M Справочник', this, true)">📖 G/M Коды</button>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn active" id="nav-regimes" onclick="switchTab('regimes', 'Фрезеровка', this)"><span class="nav-icon">⚙️</span>Фрезеровка</button>
+        <button class="nav-btn" id="nav-gcode" onclick="switchTab('gcode', 'Инспектор', this)"><span class="nav-icon">🛡️</span>Инспектор</button>
+        <button class="nav-btn" id="nav-timecost" onclick="switchTab('timecost', 'Время', this)"><span class="nav-icon">⏱</span>Время</button>
+        <button class="nav-btn" id="nav-more" onclick="toggleMoreMenu()"><span class="nav-icon">☰</span>Ещё</button>
+    </nav>
+
+    <script>
+        let scene, camera, renderer, toolMesh, trajectoryLine, isInitialized3D = false;
+
+        async function initApp() {
+            try {
+                const mats = await window.pywebview.api.get_materials();
+                const sel = document.getElementById('reg-mat');
+                sel.innerHTML = '';
+                for (let k in mats) { let o = document.createElement('option'); o.value = k; o.innerText = mats[k].name; sel.appendChild(o); }
+            } catch(e) {}
+        }
+
+        function useQuickPrompt(text) {
+            document.getElementById('chat-user-input').value = text;
+            sendChatMessage();
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-user-input');
+            const messageText = input.value.trim();
+            if (!messageText) return;
+
+            const messagesContainer = document.getElementById('chat-messages');
+            const userBubble = document.createElement('div');
+            userBubble.className = 'chat-bubble user';
+            userBubble.innerText = messageText;
+            messagesContainer.appendChild(userBubble);
+
+            input.value = '';
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const loadingBubble = document.createElement('div');
+            loadingBubble.className = 'chat-bubble assistant';
+            loadingBubble.innerHTML = '⚙️ <i>Консультируюсь с технологом...</i>';
+            messagesContainer.appendChild(loadingBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            try {
+                const res = await window.pywebview.api.ask_ai_chat(messageText, 'general');
+                messagesContainer.removeChild(loadingBubble);
+
+                const botBubble = document.createElement('div');
+                botBubble.className = 'chat-bubble assistant';
+                botBubble.innerHTML = res.status === 'ok' ? res.reply : `<span style="color:var(--danger-color);">${res.reply}</span>`;
+                messagesContainer.appendChild(botBubble);
+            } catch (e) {
+                messagesContainer.removeChild(loadingBubble);
+                const errBubble = document.createElement('div');
+                errBubble.className = 'chat-bubble assistant';
+                errBubble.innerHTML = `<span style="color:var(--danger-color);">Ошибка сети/API: ${e}</span>`;
+                messagesContainer.appendChild(errBubble);
+            }
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        async function clearChat() {
+            await window.pywebview.api.clear_chat_history();
+            document.getElementById('chat-messages').innerHTML = '<div class="chat-bubble assistant">🤖 Диалог сброшен. Какой вопрос разберем?</div>';
+        }
+
+        function toggleMoreMenu() { document.getElementById('more-menu').classList.toggle('show'); }
+        document.querySelector('.content').addEventListener('click', () => document.getElementById('more-menu').classList.remove('show'));
+
+        function switchTab(id, title, btn, isPopup = false) {
+            document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn, .popup-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + id).classList.add('active');
+            document.getElementById('page-title').innerText = title;
+            if (id === 'viewer' && !isInitialized3D) setTimeout(() => init3DViewer(), 100);
+            if (isPopup) { btn.classList.add('active'); document.getElementById('nav-more').classList.add('active'); }
+            else { btn.classList.add('active'); }
+            document.getElementById('more-menu').classList.remove('show');
+        }
+
+        function init3DViewer() {
+            const container = document.getElementById('webgl-container');
+            if (!container || isInitialized3D) return;
+            scene = new THREE.Scene(); scene.background = new THREE.Color(0x05070c);
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(100, 80, 100); camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            let dLight = new THREE.DirectionalLight(0xffffff, 0.8); dLight.position.set(50, 100, 50); scene.add(dLight);
+            let grid = new THREE.GridHelper(120, 12, 0x3b82f6, 0x1a2642); grid.position.y = -15; scene.add(grid);
+            let stock = new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshPhysicalMaterial({ color: 0x1d4ed8, transparent: true, opacity: 0.25 }));
+            scene.add(stock);
+            toolMesh = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 25, 16), new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.8 }));
+            toolMesh.position.set(0, 20, 0); scene.add(toolMesh);
+            
+            let isDragging = false, px = 0, py = 0;
+            container.onmousedown = (e) => { isDragging = true; px = e.clientX; py = e.clientY; };
+            window.onmouseup = () => { isDragging = false; };
+            container.onmousemove = (e) => {
+                if (!isDragging) return;
+                scene.rotation.y += (e.clientX - px) * 0.008; scene.rotation.x += (e.clientY - py) * 0.008;
+                px = e.clientX; py = e.clientY; renderer.render(scene, camera);
+            };
+            isInitialized3D = true; loadAndRender3D(); animate();
+        }
+
+        function animate() { if (!isInitialized3D) return; requestAnimationFrame(animate); renderer.render(scene, camera); }
+
+        function loadAndRender3D() {
+            if (!isInitialized3D) return;
+            const text = document.getElementById('gc-text').value || "G00 X0 Y0 Z25\nG01 X30 Y0 Z-5 F200\nG01 X30 Y30 Z-5\nG01 X0 Y30 Z-5\nG01 X0 Y0 Z-5\nG00 Z25";
+            if (trajectoryLine) scene.remove(trajectoryLine);
+            let pts = [new THREE.Vector3(0, 0, 0)], cx = 0, cy = 0, cz = 0;
+            for (let line of text.split('\n')) {
+                let mx = line.match(/X([-0-9.]+)/), my = line.match(/Y([-0-9.]+)/), mz = line.match(/Z([-0-9.]+)/);
+                if (mx || my || mz) { cx = mx ? parseFloat(mx[1]) : cx; cy = my ? parseFloat(my[1]) : cy; cz = mz ? parseFloat(mz[1]) : cz; pts.push(new THREE.Vector3(cx, cz, cy)); }
+            }
+            if (pts.length > 1) {
+                let last = pts[pts.length - 1]; toolMesh.position.set(last.x, last.y + 12, last.z);
+                trajectoryLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 3 }));
+                scene.add(trajectoryLine);
+            }
+        }
+
+        async function calcRegimes() {
+            let res = await window.pywebview.api.calculate_regimes_by_material(document.getElementById('reg-d').value, document.getElementById('reg-z').value, document.getElementById('reg-mat').value);
+            let box = document.getElementById('reg-res'); box.style.display = 'block';
+            box.innerHTML = `Vc: <b>${res.vc} м/мин</b> | fz: <b>${res.fz} мм</b><br>Обороты: <b>${res.n} об/мин</b><br>Подача: <b>${res.vf} мм/мин</b>`;
+        }
+        async function calcTurning() {
+            let res = await window.pywebview.api.calculate_turning(document.getElementById('turn-d').value, document.getElementById('turn-vc').value, document.getElementById('turn-fr').value);
+            let box = document.getElementById('turn-res'); box.style.display = 'block';
+            box.innerHTML = `Обороты: <b>${res.n} об/мин</b><br>Минутная подача: <b>${res.fm} мм/мин</b>`;
+        }
+        async function calcThread() {
+            let res = await window.pywebview.api.calculate_thread(document.getElementById('th-nom').value, document.getElementById('th-pitch').value);
+            let box = document.getElementById('th-res'); box.style.display = 'block';
+            box.innerHTML = `Регламент M${res.nominal}x${res.pitch}<br>Сверло: <b style="color:var(--success-color);">Ø ${res.drill_d} мм</b>`;
+        }
+        async function calcTolerance() {
+            let res = await window.pywebview.api.calculate_tolerance(document.getElementById('tol-nom').value, document.getElementById('tol-fit').value);
+            let box = document.getElementById('tol-res'); box.style.display = 'block';
+            box.innerHTML = `Поле: <b>${res.fit}</b> | Отклонения: +${res.es} / ${res.ei}<br>Пределы: <b>${res.min} ... ${res.max} мм</b>`;
+        }
+        async function calcPCD() {
+            let res = await window.pywebview.api.generate_pcd(document.getElementById('pcd-r').value, document.getElementById('pcd-count').value, 0, document.getElementById('pcd-depth').value, 50);
+            let box = document.getElementById('pcd-res'); box.style.display = 'block';
+            box.innerHTML = `<pre style="font-size:0.7rem; max-height:80px; overflow:auto;">${res.gcode}</pre>`;
+        }
+        async function exportCurrentGCode(name) {
+            let code = document.getElementById('gc-text').value; if (!code.trim()) return alert("Пусто!");
+            let res = await window.pywebview.api.export_gcode_file(name, code);
+            if (res.status === 'ok') alert("Сохранено в:\n" + res.path);
+        }
+        async function validateCode() {
+            let res = await window.pywebview.api.validate_gcode(document.getElementById('gc-text').value);
+            let box = document.getElementById('gc-res'); box.style.display = 'block';
+            box.innerHTML = res.is_safe ? '✔ Безопасно' : '⚠ ' + res.warnings.join('<br>');
+        }
+        async function calcTimeCost() {
+            let res = await window.pywebview.api.estimate_time_and_cost(document.getElementById('tc-gcode').value, document.getElementById('tc-rate').value, document.getElementById('tc-setup').value);
+            let box = document.getElementById('tc-res'); box.style.display = 'block';
+            box.innerHTML = res.status === 'ok' ? `Время: <b>${res.time_min} мин</b> | Цена: <b>${res.total_cost} руб.</b>` : res.message;
+        }
+        async function searchCode() {
+            let res = await window.pywebview.api.search_code(document.getElementById('code-input').value);
+            let box = document.getElementById('code-res'); box.style.display = 'block';
+            box.innerHTML = res.status === 'ok' ? `<b>${res.code}:</b> ${res.desc}` : res.message;
+        }
+    </script>
+</body>
+</html>
