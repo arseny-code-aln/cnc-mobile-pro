@@ -1,13 +1,29 @@
 [app]
+
+# Название приложения
 title = CNC Mobile Pro
 package.name = cncmobilepro
 package.domain = org.cnc
-source.include_exts = py,png,jpg,kv,atlas,html,js,css
-source.main_entry = main.py
-version = 1.0
-requirements = python3,pywebview,pyjnius,android,requests
+
+# Включаемые расширения файлов (обязательно укажите html и js для вашего интерфейса)
+source.include_exts = py,png,jpg,kv,atlas,html,js
+
+# Главный файл запуска Python
+source.main_file = main.py
+
+version = 1.0.0
+
+# Точный и проверенный набор зависимостей для pywebview на Android
+requirements = python3,kivy,pywebview,pyobjus,android
+
 orientation = portrait
-android.permissions = INTERNET
+
+# Разрешения для работы с памятью (чтобы можно было открывать STL-файлы)
+android.permissions = WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+
+android.api = 33
+android.minapi = 21
+android.archs = armeabi-v7a, arm64-v8a
 
 [buildozer]
 log_level = 2
