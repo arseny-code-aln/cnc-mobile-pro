@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CNC Mobile Pro</title>
+    <!-- Подключаем Three.js, OrbitControls и STLLoader -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <style>
         :root {
             --bg-color: #0b0f19; --panel-bg: #131d31; --panel-card: #1a2642;
@@ -17,7 +20,7 @@
         header { background: var(--panel-bg); padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 1.1rem; color: #60a5fa; }
         .content { flex: 1; overflow-y: auto; padding: 14px; padding-bottom: 70px; }
-        .tab-pane { display: none; }
+        .tab-pane { display: none; height: 100%; }
         .tab-pane.active { display: block; }
         .card { background: var(--panel-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
         .card h3 { font-size: 1rem; margin-bottom: 12px; color: #60a5fa; }
@@ -27,8 +30,13 @@
         button.btn { width: 100%; padding: 10px; background: var(--accent-gradient); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 6px; }
         button.btn-secondary { background: #2a3a5e; }
         .result-box { background: var(--bg-color); border: 1px solid var(--border-color); border-left: 4px solid var(--success-color); padding: 10px; margin-top: 10px; font-size: 0.8rem; line-height: 1.4; }
-        #webgl-container { width: 100%; height: 320px; background: #05070c; border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
         
+        /* Стили для 3D симулятора */
+        #tab-viewer { position: relative; height: calc(100vh - 140px); display: flex; flex-direction: column; }
+        #webgl-container { width: 100%; flex: 1; background: #05070c; border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; min-height: 280px; }
+        .scene-controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        .scene-controls button { flex: 1; min-width: 100px; margin-top: 0; font-size: 0.8rem; }
+
         .chat-container { display: flex; flex-direction: column; height: calc(100vh - 180px); background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
         .chat-messages { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 0.85rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
@@ -59,6 +67,7 @@
     </header>
 
     <div class="content">
+        <!-- 1. Фрезерные режимы -->
         <div id="tab-regimes" class="tab-pane active">
             <div class="card">
                 <h3>Фрезерные режимы</h3>
@@ -70,6 +79,7 @@
             </div>
         </div>
 
+        <!-- 2. Токарные режимы -->
         <div id="tab-turning" class="tab-pane">
             <div class="card">
                 <h3>Токарные режимы</h3>
@@ -81,16 +91,23 @@
             </div>
         </div>
 
+        <!-- 3. Инспектор G-кода -->
         <div id="tab-gcode" class="tab-pane">
             <div class="card">
                 <h3>Проверка G-кода</h3>
-                <div class="form-group"><label>Код</label><textarea id="gc-text" rows="5" placeholder="G90..."></textarea></div>
+                <div class="form-group"><label>Код</label><textarea id="gc-text" rows="5" placeholder="G90...">G00 X0 Y0 Z25
+G01 X30 Y0 Z-5 F200
+G01 X30 Y30 Z-5
+G01 X0 Y30 Z-5
+G01 X0 Y0 Z-5
+G00 Z25</textarea></div>
                 <button class="btn" onclick="validateCode()">Проверить</button>
                 <div id="gc-res" class="result-box" style="display:none;"></div>
                 <button class="btn btn-secondary" style="margin-top:10px;" onclick="exportCurrentGCode('prog')">💾 Сохранить</button>
             </div>
         </div>
 
+        <!-- 4. Время и Стоимость -->
         <div id="tab-timecost" class="tab-pane">
             <div class="card">
                 <h3>Время и Стоимость</h3>
@@ -102,6 +119,7 @@
             </div>
         </div>
 
+        <!-- 5. Справочники -->
         <div id="tab-handbook" class="tab-pane">
             <div class="card">
                 <h3>🔩 Резьбы и сверла</h3>
@@ -121,6 +139,7 @@
             </div>
         </div>
 
+        <!-- 6. ИИ Чат -->
         <div id="tab-ai" class="tab-pane">
             <div class="quick-prompts">
                 <div class="prompt-chip" onclick="useQuickPrompt('Как убрать вибрацию при фрезеровании титана?')">⚡ Борьба с вибрацией</div>
@@ -140,14 +159,18 @@
             <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.75rem;" onclick="clearChat()">🗑 Очистить диалог</button>
         </div>
 
+        <!-- 7. Объединенный 3D Симулятор + STL Загрузчик -->
         <div id="tab-viewer" class="tab-pane">
-            <div class="card">
-                <h3>3D Симулятор</h3>
-                <div id="webgl-container"></div>
-                <button class="btn" style="margin-top: 12px;" onclick="loadAndRender3D()">Запустить симуляцию</button>
+            <div id="webgl-container"></div>
+            <input type="file" id="stl-file-input" accept=".stl" style="display:none" onchange="loadSTLFile(event)">
+            <div class="scene-controls">
+                <button class="btn" onclick="document.getElementById('stl-file-input').click()">📁 STL</button>
+                <button class="btn btn-secondary" onclick="addNewPart()">+ Примитив</button>
+                <button class="btn btn-secondary" onclick="loadAndRenderTrajectory()">▶ Траектория</button>
             </div>
         </div>
 
+        <!-- 8. PCD Генератор -->
         <div id="tab-pcd" class="tab-pane">
             <div class="card">
                 <h3>Генератор PCD</h3>
@@ -158,6 +181,7 @@
             </div>
         </div>
 
+        <!-- 9. G/M Справочник -->
         <div id="tab-codes" class="tab-pane">
             <div class="card">
                 <h3>G/M Коды</h3>
@@ -168,6 +192,7 @@
         </div>
     </div>
 
+    <!-- Выпадающее меню «Ещё» -->
     <div id="more-menu" class="popup-menu">
         <button class="popup-btn" onclick="switchTab('turning', 'Токарка', this, true)">🟢 Токарка</button>
         <button class="popup-btn" onclick="switchTab('handbook', 'Справочники', this, true)">📚 Справочники</button>
@@ -177,6 +202,7 @@
         <button class="popup-btn" onclick="switchTab('codes', 'G/M Справочник', this, true)">📖 G/M Коды</button>
     </div>
 
+    <!-- Нижняя навигационная панель -->
     <nav class="bottom-nav">
         <button class="nav-btn active" id="nav-regimes" onclick="switchTab('regimes', 'Фрезеровка', this)"><span class="nav-icon">⚙️</span>Фрезеровка</button>
         <button class="nav-btn" id="nav-gcode" onclick="switchTab('gcode', 'Инспектор', this)"><span class="nav-icon">🛡️</span>Инспектор</button>
@@ -185,7 +211,8 @@
     </nav>
 
     <script>
-        let scene, camera, renderer, toolMesh, trajectoryLine, isInitialized3D = false;
+        let scene, camera, renderer, controls, toolMesh, trajectoryLine, isInitialized3D = false;
+        let partsGroup = new THREE.Group();
 
         async function initApp() {
             try {
@@ -252,7 +279,15 @@
             document.querySelectorAll('.nav-btn, .popup-btn').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + id).classList.add('active');
             document.getElementById('page-title').innerText = title;
-            if (id === 'viewer' && !isInitialized3D) setTimeout(() => init3DViewer(), 100);
+            
+            if (id === 'viewer') {
+                if (!isInitialized3D) {
+                    setTimeout(() => init3DViewer(), 100);
+                } else {
+                    onWindowResize();
+                }
+            }
+
             if (isPopup) { btn.classList.add('active'); document.getElementById('nav-more').classList.add('active'); }
             else { btn.classList.add('active'); }
             document.getElementById('more-menu').classList.remove('show');
@@ -261,47 +296,132 @@
         function init3DViewer() {
             const container = document.getElementById('webgl-container');
             if (!container || isInitialized3D) return;
-            scene = new THREE.Scene(); scene.background = new THREE.Color(0x05070c);
-            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-            camera.position.set(100, 80, 100); camera.lookAt(0, 0, 0);
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x05070c);
+
+            camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(50, 40, 50);
+
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
             scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-            let dLight = new THREE.DirectionalLight(0xffffff, 0.8); dLight.position.set(50, 100, 50); scene.add(dLight);
-            let grid = new THREE.GridHelper(120, 12, 0x3b82f6, 0x1a2642); grid.position.y = -15; scene.add(grid);
-            let stock = new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshPhysicalMaterial({ color: 0x1d4ed8, transparent: true, opacity: 0.25 }));
-            scene.add(stock);
-            toolMesh = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 25, 16), new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.8 }));
-            toolMesh.position.set(0, 20, 0); scene.add(toolMesh);
-            
-            let isDragging = false, px = 0, py = 0;
-            container.onmousedown = (e) => { isDragging = true; px = e.clientX; py = e.clientY; };
-            window.onmouseup = () => { isDragging = false; };
-            container.onmousemove = (e) => {
-                if (!isDragging) return;
-                scene.rotation.y += (e.clientX - px) * 0.008; scene.rotation.x += (e.clientY - py) * 0.008;
-                px = e.clientX; py = e.clientY; renderer.render(scene, camera);
-            };
-            isInitialized3D = true; loadAndRender3D(); animate();
+            let dLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dLight.position.set(50, 100, 50);
+            scene.add(dLight);
+
+            let grid = new THREE.GridHelper(100, 10, 0x3b82f6, 0x1a2642);
+            grid.position.y = -0.1;
+            scene.add(grid);
+
+            scene.add(partsGroup);
+
+            toolMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(2, 2, 20, 16),
+                new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.8 })
+            );
+            toolMesh.position.set(0, 10, 0);
+            scene.add(toolMesh);
+
+            isInitialized3D = true;
+            addNewPart();
+            loadAndRenderTrajectory();
+            animate();
+
+            window.addEventListener('resize', onWindowResize);
         }
 
-        function animate() { if (!isInitialized3D) return; requestAnimationFrame(animate); renderer.render(scene, camera); }
+        function addNewPart() {
+            if (!isInitialized3D) return;
+            const geometry = new THREE.BoxGeometry(30, 15, 30);
+            const material = new THREE.MeshPhysicalMaterial({ 
+                color: 0x1d4ed8, 
+                transparent: true, 
+                opacity: 0.35,
+                roughness: 0.2
+            });
+            const part = new THREE.Mesh(geometry, material);
+            part.position.set(0, 7.5, 0);
+            partsGroup.clear();
+            partsGroup.add(part);
+        }
 
-        function loadAndRender3D() {
+        function loadSTLFile(event) {
+            const file = event.target.files[0];
+            if (!file || !isInitialized3D) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const loader = new THREE.STLLoader();
+                    const geometry = loader.parse(e.target.result);
+                    
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: 0x60a5fa, 
+                        metalness: 0.4, 
+                        roughness: 0.3 
+                    });
+                    
+                    const mesh = new THREE.Mesh(geometry, material);
+                    geometry.center();
+                    mesh.position.set(0, 5, 0);
+                    
+                    partsGroup.clear();
+                    partsGroup.add(mesh);
+                } catch (err) {
+                    alert("Ошибка при чтении STL файла: " + err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function loadAndRenderTrajectory() {
             if (!isInitialized3D) return;
             const text = document.getElementById('gc-text').value || "G00 X0 Y0 Z25\nG01 X30 Y0 Z-5 F200\nG01 X30 Y30 Z-5\nG01 X0 Y30 Z-5\nG01 X0 Y0 Z-5\nG00 Z25";
+            
             if (trajectoryLine) scene.remove(trajectoryLine);
+            
             let pts = [new THREE.Vector3(0, 0, 0)], cx = 0, cy = 0, cz = 0;
             for (let line of text.split('\n')) {
                 let mx = line.match(/X([-0-9.]+)/), my = line.match(/Y([-0-9.]+)/), mz = line.match(/Z([-0-9.]+)/);
-                if (mx || my || mz) { cx = mx ? parseFloat(mx[1]) : cx; cy = my ? parseFloat(my[1]) : cy; cz = mz ? parseFloat(mz[1]) : cz; pts.push(new THREE.Vector3(cx, cz, cy)); }
+                if (mx || my || mz) { 
+                    cx = mx ? parseFloat(mx[1]) : cx; 
+                    cy = my ? parseFloat(my[1]) : cy; 
+                    cz = mz ? parseFloat(mz[1]) : cz; 
+                    pts.push(new THREE.Vector3(cx, cz, cy)); 
+                }
             }
+            
             if (pts.length > 1) {
-                let last = pts[pts.length - 1]; toolMesh.position.set(last.x, last.y + 12, last.z);
-                trajectoryLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 3 }));
+                let last = pts[pts.length - 1]; 
+                toolMesh.position.set(last.x, last.y + 10, last.z);
+                
+                const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+                trajectoryLine = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 3 }));
                 scene.add(trajectoryLine);
             }
+        }
+
+        function animate() {
+            if (!isInitialized3D) return;
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('webgl-container');
+            if (!container || !isInitialized3D) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
         }
 
         async function calcRegimes() {
